@@ -1,12 +1,9 @@
 #!/usr/bin/env python3
-"""A simple hello script with argparse support."""
+"""A simple hello script using greeting.py's greet() and argparse."""
 
 import argparse
 
-
-def greet(name: str = "Looper") -> str:
-    """Return a greeting string for the given name."""
-    return f"Hello from {name}!"
+from greeting import greet
 
 
 def main() -> None:
@@ -15,8 +12,8 @@ def main() -> None:
     parser.add_argument(
         "--name",
         type=str,
-        default="Looper",
-        help="Name to greet (default: Looper)",
+        default="World",
+        help="Name to greet (default: World)",
     )
     args = parser.parse_args()
     print(greet(args.name))
