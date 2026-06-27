@@ -1,40 +1,51 @@
 # Spec: Implement `hello.py` (Issue #72)
 
-## Problem
+> **Status:** Issue #72 is OPEN. A prior attempt (#93) landed `hello.py` on `main` but with a different approach (imported `greet()` from `greeting.py`, used `"Hello, {name}!"` format, default `"World"`). Issue #72 calls for its own `greet()` with `"Hello from {name}!"` format and `"Looper"` default. This plan reconciles the two by replacing the current `hello.py` with the #72-specified version.
 
-**Issue #72** asks for a `hello.py` script that prints `"Hello from Looper!"` with an optional `--name` flag to customize the greeting. The repository already has `greeting.py` (PR #37) with its own `greet()` returning `"Hello, {name}!"` — since the output format for this issue is different (`"Hello from {name}!"` vs `"Hello, {name}!"`), `hello.py` will define its own `greet()` with the required template rather than importing from `greeting.py`.
+## Context
+
+Issue #72 (original): Add `hello.py` with its own `greet()` returning `"Hello from {name}!"`, using `argparse --name` with default `"Looper"`.
+
+Issue #93 (merged): Added `hello.py` that **reuses** `greeting.py`'s `greet()` (returning `"Hello, {name}!"`) with default `"World"`.
+
+The #93 implementation is currently on `main`. Issue #72 remains **open** and its requirements differ from what #93 delivered:
+
+| Aspect | #72 requirement | #93 implementation (current `main`) |
+|--------|----------------|-------------------------------------|
+| `greet()` source | Own function in `hello.py` | Imports from `greeting.py` |
+| Greeting format | `"Hello from {name}!"` | `"Hello, {name}!"` |
+| Default `--name` | `"Looper"` | `"World"` |
 
 ## Goals
 
-1. Create an executable `hello.py` at the repo root.
+1. **Replace** the current `hello.py` with the version specified by #72 (own `greet()`, `"Hello from {name}!"`, default `"Looper"`).
 2. Use `argparse` for CLI argument parsing with a `--name` flag.
-3. Own a `greet()` function with `"Hello from {name}!"` format (distinct from `greeting.py`'s `"Hello, {name}!"`).
-4. Default value for `--name` must be `"Looper"` (so bare invocation prints `"Hello from Looper!"`).
-5. Keep `greeting.py` unchanged — do not refactor or extract its `main()`.
+3. Keep `greeting.py` unchanged — it retains its own `greet()` with `"Hello, {name}!"` format.
+4. Both scripts remain independently runnable with distinct output formats.
 
 ## Non-goals
 
-- No changes to `greeting.py` or its test infrastructure.
-- No packaging / `setup.py` / `pyproject.toml` — both scripts run as `python3 hello.py`.
+- No changes to `greeting.py` or its `greet()` function.
+- No packaging / `setup.py` / `pyproject.toml`.
 - No error handling beyond what `argparse` provides for `--name`.
+- No changes to the `greeting.py` import behavior — `from greeting import greet` continues to work.
 
 ---
 
 ## Implementation Steps
 
-### Step 1 — Create `hello.py`
+### Step 1 — Replace `hello.py`
 
-Create a new file `/private/tmp/test-looper/hello.py` (repo root).
+Overwrite the existing file at `hello.py` (repo root).
 
 **Structure:**
 
 ```python
 #!/usr/bin/env python3
-"""A simple hello script with argparse support."""
+"""A simple hello script with argparse --name flag. Uses its own greet()."""
 
 import argparse
-# Own `greet()` — the issue asks for `"Hello from {name}!"` format
-# which differs from greeting.py's `"Hello, {name}!"`
+
 
 def greet(name: str = "Looper") -> str:
     """Return a greeting string for the given name."""
@@ -42,6 +53,7 @@ def greet(name: str = "Looper") -> str:
 
 
 def main() -> None:
+    """Parse command-line arguments and print a greeting."""
     parser = argparse.ArgumentParser(description="Print a greeting.")
     parser.add_argument(
         "--name",
@@ -57,53 +69,51 @@ if __name__ == "__main__":
     main()
 ```
 
-**Rationale for key choices:**
+**Key design decisions:**
 
-| Choice | Reason |
-|--------|--------|
-| Own `greet()` (not importing from `greeting.py`) | The issue specifies `"Hello from {name}!"` format, which differs from `greeting.py`'s `"Hello, {name}!"`. A standalone function avoids coupling the two scripts against a cosmetic template choice; if the template format needs to change in the future, each script can be updated independently. |
-| `default="Looper"` | Matches the issue's example output `"Hello from Looper!"`. |
-| `--name` (not positional) | Flags are more self-documenting, consistent with common argparse patterns. Positional would also work but flags are the pattern used more often when there's only one optional argument. |
-| shebang line | Makes the file directly executable (`./hello.py`) for local testing. |
-| `__name__ == "__main__"` guard | Allows `greet()` to be imported from `hello.py` in the future if needed. |
+| Choice | Rationale |
+|--------|-----------|
+| Own `greet()` (not importing from `greeting.py`) | Issue #72 specifies `"Hello from {name}!"`, which differs from `greeting.py`'s `"Hello, {name}!"`. These are deliberately distinct formats. |
+| `default="Looper"` | Matches the issue description: bare invocation must print `"Hello from Looper!"`. |
+| `--name` flag (not positional) | Self-documenting; consistent with the prior #93 implementation's convention. |
+| shebang line | Direct execution support (`./hello.py`). |
+| `if __name__ == "__main__":` guard | Allows importing `greet()` from `hello.py` in the future if needed. |
 
 ### Step 2 — Verify correctness
 
-After writing the file, validate:
-
 ```bash
 cd /private/tmp/test-looper
-python3 hello.py                    # → "Hello from Looper!"
-python3 hello.py --name Alice       # → "Hello from Alice!"
-python3 hello.py --name "Bob Dole"  # → "Hello from Bob Dole!"
-python3 hello.py --help             # shows help text
+python3 hello.py                     # → "Hello from Looper!"
+python3 hello.py --name Alice        # → "Hello from Alice!"
+python3 hello.py --name "Bob Dole"   # → "Hello from Bob Dole!"
+python3 hello.py --help              # shows help text
+python3 hello.py --unknown-flag      # exits with error (non-zero)
+python3 greeting.py                  # → "Hello, World!" (unchanged)
+python3 greeting.py Alice            # → "Hello, Alice!" (unchanged)
+python3 -c "from greeting import greet; print(greet())"  # still works
 ```
-
-The first three assertions each check one path through the single branch point (`name` defaulted vs overridden). The `--help` test is a usability check and makes `argparse` produce its full output.
 
 ### Step 3 — Commit and push
 
-Working from the main repo at `/private/tmp/test-looper`:
-
 ```bash
 git add hello.py
-git commit -m "feat: add hello.py with argparse --name support (#72)
+git commit -m "feat: hello.py with own greet() and 'Looper' default (#72)
 
 Co-Authored-By: Claude <noreply@anthropic.com>"
 git push origin HEAD
 ```
 
-The commit message follows the repo's existing convention (see `48ed356` and `217e6e7`): start with `feat:`, reference the issue with `(#72)`, and include the Claude co-author trailer.
-
 ---
 
 ## Files touched
 
-| File | Action |
-|------|--------|
-| `hello.py` | **CREATE** — executable Python script using shebang |
-| `greeting.py` | untouched |
+| File | Action | Notes |
+|------|--------|-------|
+| `hello.py` | **REPLACE** | Overwrite existing content with #72 version |
+| `greeting.py` | untouched | Unchanged |
 
 ## Backward compatibility
 
-No breaking changes. `greeting.py` works exactly as before — `python3 greeting.py` still prints `"Hello, World!"`, `python3 greeting.py Alice` prints `"Hello, Alice!"`.
+- `greeting.py` is **completely unchanged** — `python3 greeting.py` still prints `"Hello, World!"`, `python3 greeting.py Alice` still prints `"Hello, Alice!"`.
+- `hello.py` **changes behavior**: bare call now prints `"Hello from Looper!"` instead of `"Hello, World!"`. This is intentional to match issue #72's requirements.
+- `from greeting import greet` continues to work for any code that imports from `greeting.py`.
