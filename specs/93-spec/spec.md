@@ -1,4 +1,4 @@
-# Spec: hello.py with argparse `--name` flag
+# Spec: Replace `hello.py` with an import-based version (Issue #93)
 
 Issue: #93
 Spec: specs/93-spec/spec.md
@@ -7,44 +7,44 @@ Spec: specs/93-spec/spec.md
 
 ## Objective
 
-Add a new `hello.py` script that prints a greeting and accepts a `--name` argument via Python's `argparse` module, building on the existing `greeting.py` library function. This reuses the `greet()` function from `greeting.py` rather than duplicating the greeting logic.
+Replace the existing `hello.py` (from issue #72) with a cleaned-up version that reuses the `greet()` function from `greeting.py` via import, rather than defining its own `greet()`. The script should use `argparse` for a `--name` flag and match `greeting.py`'s greeting format (`"Hello, {name}!"`).
 
 ## Background
 
-A prior attempt (issue #72 / #101) added `hello.py` but the file was created inside a git worktree directory (`.looper/worktrees/worker-*`) and never merged onto `main`. Issue #93 is a fresh attempt to land `hello.py` on `main` with equivalent functionality.
+Issue #72 added `hello.py` with its own `greet()` function that produced `"Hello from {name}!"` — a format different from `greeting.py`'s `"Hello, {name}!"`. That version is now on `main` (commit `e26dea2`).
 
-To avoid repeating the same issue, the spec should ensure the file is placed directly in the repo root alongside `greeting.py`, not inside a `.looper` worktree directory.
+Issue #93 takes a different approach: instead of duplicating the greeting logic, `hello.py` should import `greet()` from `greeting.py`, keeping the single source of truth for greeting templates. This reduces code duplication and makes future greeting format changes consistent across all scripts.
 
 ## Implementation Plan
 
-1. **Create `hello.py`** — write a new executable Python script at the repo root.
-   - Reuse `greet()` by importing it from `greeting.py`.
-   - Use `argparse.ArgumentParser` to declare a `--name` flag (default: `"World"`).
+1. **Replace `hello.py`** — overwrite the existing file at the repo root.
+   - Import `greet()` from `greeting.py` (instead of defining a local `greet()`).
+   - Use `argparse.ArgumentParser` to declare a `--name` flag (default: `"World"`, matching `greeting.py`'s `greet()` default).
    - Print the result of `greet(name)`.
    - Include a `main()` function guarded with `if __name__ == "__main__":`.
-   - Use the same `#!/usr/bin/env python3` shebang as the project convention.
+   - Keep the `#!/usr/bin/env python3` shebang.
 
-2. **Verify correctness** — run `python3 hello.py` and `python3 hello.py --name Alice` and confirm the output matches `greeting.py`'s behavior.
+2. **Verify correctness** — run the script with and without `--name` and confirm output matches `greeting.py`'s behavior.
 
 ## Files to Change
 
 | File | Action | Notes |
 |---|---|---|
-| `hello.py` | **Create** (at repo root) | New script. Imports `greet` from `greeting.py`; parses `--name` via argparse. Must be placed in the repo root, not inside `.looper/worktrees/`. |
+| `hello.py` | **Replace** (at repo root) | Overwrite the existing file. Drops the local `greet()` in favor of `from greeting import greet`. |
 
 ## Risks
 
-- **Import path confusion** — if `hello.py` is run from outside the repo root, the `from greeting import greet` import could fail. Running from the project root (where `greeting.py` lives) avoids this.
-- **Argparse default vs script default mismatch** — the argparse default for `--name` must match `greeting.py`'s `greet()` default (`"World"`) so the bare-call behavior is identical.
-- **Regression on greeting.py** — the existing `greeting.py` should be left completely unchanged.
-- **Worktree placement** — `hello.py` must be created at the repo root (not inside `.looper/worktrees/`) so the file lands on `main` after merging.
+- **Import path** — `from greeting import greet` only works when run from the repo root. Running `python3 path/to/hello.py` from elsewhere will fail with `ModuleNotFoundError`. All usage should be from the project root.
+- **Argparse default must match greeting.py** — the `--name` default must be `"World"` so bare `python3 hello.py` behaves identically to `python3 greeting.py`.
+- **Regression on greeting.py** — `greeting.py` must remain untouched.
+- **Existing hello.py on main** — the file already exists from #72; the replacement is intentional and changes the output format from `"Hello from {name}!"` to `"Hello, {name}!`".
 
 ## Acceptance Criteria
 
-1. `python3 hello.py` prints `Hello, World!` (uses the argparse default).
+1. `python3 hello.py` prints `Hello, World!` (uses argparse default, matching `greeting.py`'s default).
 2. `python3 hello.py --name Alice` prints `Hello, Alice!`.
-3. `python3 hello.py --name "Bob Smith"` prints `Hello, Bob Smith!` (quoted names with spaces work).
+3. `python3 hello.py --name "Bob Smith"` prints `Hello, Bob Smith!` (quoted multi-word names work).
 4. `python3 hello.py --help` prints a help message describing the `--name` flag.
 5. `python3 hello.py --unknown-flag` exits with a non-zero exit code and prints an error.
-6. The `greeting.py` file is not modified.
+6. `greeting.py` is not modified.
 7. `python3 -c "from greeting import greet; print(greet())"` still works (no import chain breaks).
